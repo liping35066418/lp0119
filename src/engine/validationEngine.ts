@@ -231,3 +231,131 @@ export const getCurrentStep = (level: Level, placedParts: Map<string, PlacedPart
   }
   return step;
 };
+
+export interface StepSnapInfo {
+  constraintId: string;
+  partA: string;
+  partB: string;
+  worldPositionA: [number, number, number];
+  worldPositionB: [number, number, number];
+  tolerance: number;
+  distance: number;
+}
+
+export interface StepSpaceInfo {
+  constraintId: string;
+  partA: string;
+  partB: string;
+  minDistance: number;
+  maxDistance: number;
+  currentDistance: number;
+  axis: 'x' | 'y' | 'z' | 'all';
+  description: string;
+}
+
+export const getStepSnapConstraints = (
+  level: Level,
+  stepIndex: number,
+): StepSnapInfo[] => {
+  if (stepIndex < 0 || stepIndex >= level.assemblyOrder.length) return [];
+
+  const currentPartId = level.assemblyOrder[stepIndex];
+  const currentPart = level.parts.find((p) => p.id === currentPartId);
+  if (!currentPart) return [];
+
+  const results: StepSnapInfo[] = [];
+  const placedPartIds = level.assemblyOrder.slice(0, stepIndex + 1);
+
+  for (const constraint of level.snapConstraints) {
+    const hasCurrent = constraint.partA === currentPartId || constraint.partB === currentPartId;
+    const otherPartId = constraint.partA === currentPartId ? constraint.partB : constraint.partA;
+    const otherIsPlaced = placedPartIds.includes(otherPartId);
+
+    if (hasCurrent && otherIsPlaced && otherPartId !== currentPartId) {
+      const otherPart = level.parts.find((p) => p.id === otherPartId);
+      if (!otherPart) continue;
+
+      const isCurrentPartA = constraint.partA === currentPartId;
+      const snapPointCurrent = isCurrentPartA ? constraint.snapPoints.positionA : constraint.snapPoints.positionB;
+      const snapPointOther = isCurrentPartA ? constraint.snapPoints.positionB : constraint.snapPoints.positionA;
+
+      const worldPosCurrent: [number, number, number] = [
+        currentPart.targetPosition[0] + snapPointCurrent[0],
+        currentPart.targetPosition[1] + snapPointCurrent[1],
+        currentPart.targetPosition[2] + snapPointCurrent[2],
+      ];
+
+      const worldPosOther: [number, number, number] = [
+        otherPart.targetPosition[0] + snapPointOther[0],
+        otherPart.targetPosition[1] + snapPointOther[1],
+        otherPart.targetPosition[2] + snapPointOther[2],
+      ];
+
+      const dist = distance3D(worldPosCurrent, worldPosOther);
+
+      results.push({
+        constraintId: constraint.id,
+        partA: currentPartId,
+        partB: otherPartId,
+        worldPositionA: worldPosCurrent,
+        worldPositionB: worldPosOther,
+        tolerance: constraint.tolerance,
+        distance: dist,
+      });
+    }
+  }
+
+  return results;
+};
+
+export const getStepSpaceConstraints = (
+  level: Level,
+  stepIndex: number,
+): StepSpaceInfo[] => {
+  if (stepIndex < 0 || stepIndex >= level.assemblyOrder.length) return [];
+
+  const currentPartId = level.assemblyOrder[stepIndex];
+  const currentPart = level.parts.find((p) => p.id === currentPartId);
+  if (!currentPart) return [];
+
+  const results: StepSpaceInfo[] = [];
+  const placedPartIds = level.assemblyOrder.slice(0, stepIndex + 1);
+
+  for (const constraint of level.spaceConstraints) {
+    const hasCurrent = constraint.partA === currentPartId || constraint.partB === currentPartId;
+    const otherPartId = constraint.partA === currentPartId ? constraint.partB : constraint.partA;
+    const otherIsPlaced = placedPartIds.includes(otherPartId);
+
+    if (hasCurrent && otherIsPlaced && otherPartId !== currentPartId) {
+      const otherPart = level.parts.find((p) => p.id === otherPartId);
+      if (!otherPart) continue;
+
+      const dist = distanceByAxis(
+        currentPart.targetPosition,
+        otherPart.targetPosition,
+        constraint.axis,
+      );
+
+      results.push({
+        constraintId: constraint.id,
+        partA: currentPartId,
+        partB: otherPartId,
+        minDistance: constraint.minDistance,
+        maxDistance: constraint.maxDistance,
+        currentDistance: dist,
+        axis: constraint.axis,
+        description: constraint.description,
+      });
+    }
+  }
+
+  return results;
+};
+
+export const getLevelStats = (level: Level) => {
+  return {
+    assemblySteps: level.assemblyOrder.length,
+    snapConstraints: level.snapConstraints.length,
+    spaceConstraints: level.spaceConstraints.length,
+  };
+};

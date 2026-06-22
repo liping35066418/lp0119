@@ -1,8 +1,9 @@
 import { motion } from 'framer-motion';
-import { Lock, CheckCircle, Clock, AlertTriangle, Play } from 'lucide-react';
+import { Lock, CheckCircle, Clock, AlertTriangle, Play, Layers, Link2, Ruler } from 'lucide-react';
 import { Level } from '@/types';
 import { useProgressStore } from '@/store/useProgressStore';
 import { useNavigate } from 'react-router-dom';
+import { getLevelStats } from '@/engine/validationEngine';
 
 interface LevelCardProps {
   level: Level;
@@ -110,9 +111,33 @@ export default function LevelCard({ level, index }: LevelCardProps) {
           {renderDifficultyStars()}
         </div>
 
-        <p className="text-sm text-metal-400 mb-4 line-clamp-2">
+        <p className="text-sm text-metal-400 mb-3 line-clamp-2">
           {level.description}
         </p>
+
+        <div className="grid grid-cols-3 gap-2 mb-3">
+          <div className="flex flex-col items-center p-2 rounded-lg bg-metal-800/50 border border-metal-700/50">
+            <Layers className="w-4 h-4 text-tech-400 mb-1" />
+            <span className="font-display text-sm font-bold text-white">
+              {getLevelStats(level).assemblySteps}
+            </span>
+            <span className="text-xs text-metal-500">装配步数</span>
+          </div>
+          <div className="flex flex-col items-center p-2 rounded-lg bg-metal-800/50 border border-metal-700/50">
+            <Link2 className="w-4 h-4 text-success-400 mb-1" />
+            <span className="font-display text-sm font-bold text-white">
+              {getLevelStats(level).snapConstraints}
+            </span>
+            <span className="text-xs text-metal-500">卡扣点数</span>
+          </div>
+          <div className="flex flex-col items-center p-2 rounded-lg bg-metal-800/50 border border-metal-700/50">
+            <Ruler className="w-4 h-4 text-warning-400 mb-1" />
+            <span className="font-display text-sm font-bold text-white">
+              {getLevelStats(level).spaceConstraints}
+            </span>
+            <span className="text-xs text-metal-500">空间约束</span>
+          </div>
+        </div>
 
         {isCompleted && levelProgress?.bestTime !== undefined && (
           <div className="flex items-center gap-4 mb-4 text-xs text-metal-400">

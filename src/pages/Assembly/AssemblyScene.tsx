@@ -1,15 +1,25 @@
-import { useRef, useState, useCallback, useEffect } from 'react';
+import { useRef, useState, useCallback, useEffect, useMemo } from 'react';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
-import { OrbitControls, Grid, ContactShadows, Html } from '@react-three/drei';
+import { OrbitControls, Grid, ContactShadows, Html, Line } from '@react-three/drei';
 import * as THREE from 'three';
 import { Part, Level } from '@/types';
 import { useAssemblyStore } from '@/store/useAssemblyStore';
-import { validatePartPlacement, isAssemblyComplete, getCurrentStep } from '@/engine/validationEngine';
+import {
+  validatePartPlacement,
+  isAssemblyComplete,
+  getCurrentStep,
+  getStepSnapConstraints,
+  getStepSpaceConstraints,
+  StepSnapInfo,
+  StepSpaceInfo,
+} from '@/engine/validationEngine';
 
 interface SceneProps {
   level: Level;
   onValidation: (results: any[]) => void;
   onAssemblyComplete: () => void;
+  tutorialMode?: boolean;
+  tutorialStep?: number;
 }
 
 function PartMesh({
@@ -127,7 +137,7 @@ function PartMesh({
   );
 }
 
-function SceneContent({ level, onValidation, onAssemblyComplete }: SceneProps) {
+function SceneContent({ level, onValidation, onAssemblyComplete, tutorialMode = false, tutorialStep = 0 }: SceneProps) {
   const { placedParts, placePart, setSelectedPart, incrementErrorCount, startTime, setStartTime } = useAssemblyStore();
   const { camera, raycaster, pointer } = useThree();
   
@@ -138,6 +148,26 @@ function SceneContent({ level, onValidation, onAssemblyComplete }: SceneProps) {
   const targetHeightRef = useRef<number>(0);
 
   const currentStep = getCurrentStep(level, placedParts);
+
+  const tutorialSnapConstraints = useMemo(() => {
+    if (!tutorialMode) return [];
+    return getStepSnapConstraints(level, tutorialStep);
+  }, [level, tutorialStep, tutorialMode]);
+
+  const tutorialSpaceConstraints = useMemo(() => {
+    if (!tutorialMode) return [];
+    return getStepSpaceConstraints(level, tutorialStep);
+  }, [level, tutorialStep, tutorialMode]);
+
+  const tutorialPlacedPartIds = useMemo(() => {
+    if (!tutorialMode) return new Set<string>();
+    return new Set(level.assemblyOrder.slice(0, tutorialStep + 1));
+  }, [level, tutorialStep, tutorialMode]);
+
+  const tutorialCurrentPartId = useMemo(() => {
+    if (!tutorialMode) return null;
+    return level.assemblyOrder[tutorialStep] || null;
+  }, [level, tutorialStep, tutorialMode]);
 
   useEffect(() => {
     if (!startTime) {
@@ -280,6 +310,12 @@ function SceneContent({ level, onValidation, onAssemblyComplete }: SceneProps) {
   };
 
   const getPartStatus = (partId: string): 'placed' | 'current' | 'locked' => {
+    if (tutorialMode) {
+      const orderIndex = level.assemblyOrder.indexOf(partId);
+      if (orderIndex < tutorialStep) return 'placed';
+      if (orderIndex === tutorialStep) return 'current';
+      return 'locked';
+    }
     const placed = placedParts.get(partId);
     if (placed?.isCorrect) return 'placed';
     const orderIndex = level.assemblyOrder.indexOf(partId);
@@ -330,7 +366,7 @@ function SceneContent({ level, onValidation, onAssemblyComplete }: SceneProps) {
         far={4}
       />
 
-      {level.parts.filter((p) => getPartStatus(p.id) !== 'placed').map((part) => (
+      {!tutorialMode && level.parts.filter((p) => getPartStatus(p.id) !== 'placed').map((part) => (
         <PartMesh
           key={`ghost-${part.id}`}
           part={part}
@@ -347,35 +383,106 @@ function SceneContent({ level, onValidation, onAssemblyComplete }: SceneProps) {
       {level.parts.map((part) => {
         const status = getPartStatus(part.id);
         const isPlaced = status === 'placed';
-        const position = dragPositions.get(part.id) || part.targetPosition;
-        const isDragging = draggingPartId === part.id;
+        const isCurrent = status === 'current';
+        const position = tutorialMode
+          ? (isPlaced || isCurrent ? part.targetPosition : ([6, part.geometry.dimensions[1] / 2 + 0.5, -3] as [number, number, number]))
+          : (isPlaced ? part.targetPosition : (dragPositions.get(part.id) || part.targetPosition));
+        const isDragging = !tutorialMode && draggingPartId === part.id;
+
+        if (tutorialMode && status === 'locked') return null;
 
         return (
-          <PartMesh
-            key={part.id}
-            part={part}
-            position={isPlaced ? part.targetPosition : position}
-            isDragging={isDragging}
-            isPlaced={isPlaced}
-            isCorrect={isPlaced}
-            onPointerDown={(e: any) => handlePointerDown(part.id, e)}
-            onPointerUp={(e: any) => handlePointerUp(part.id, e)}
-            showGhost={false}
-          />
+          <group key={part.id}>
+            <PartMesh
+              part={part}
+              position={position}
+              isDragging={isDragging}
+              isPlaced={isPlaced}
+              isCorrect={isPlaced || (tutorialMode && isCurrent)}
+              onPointerDown={(e: any) => !tutorialMode && handlePointerDown(part.id, e)}
+              onPointerUp={(e: any) => !tutorialMode && handlePointerUp(part.id, e)}
+              showGhost={false}
+            />
+            {tutorialMode && isCurrent && (
+              <mesh position={[position[0], position[1] + part.geometry.dimensions[1] / 2 + 0.3, position[2]]}>
+                <sphereGeometry args={[0.15, 16, 16]} />
+                <meshBasicMaterial color="#00D4FF" />
+              </mesh>
+            )}
+          </group>
         );
       })}
 
-      <Html position={[7, 4, -1]} center>
-        <div className="bg-metal-800/80 backdrop-blur-sm px-3 py-2 rounded-lg border border-metal-600 text-center">
-          <p className="text-xs text-metal-400 font-display">待装配区</p>
-        </div>
-      </Html>
+      {tutorialMode && tutorialSnapConstraints.map((snap, index) => (
+        <group key={`snap-${snap.constraintId}`}>
+          <mesh position={snap.worldPositionA}>
+            <sphereGeometry args={[0.08, 16, 16]} />
+            <meshBasicMaterial color="#FF6B6B" />
+          </mesh>
+          <mesh position={snap.worldPositionB}>
+            <sphereGeometry args={[0.08, 16, 16]} />
+            <meshBasicMaterial color="#FF6B6B" />
+          </mesh>
+          <Line
+            points={[snap.worldPositionA, snap.worldPositionB]}
+            color="#FF6B6B"
+            lineWidth={2}
+            transparent
+            opacity={0.8}
+            dashed
+            dashSize={0.1}
+            gapSize={0.05}
+          />
+          <Html
+            position={[
+              (snap.worldPositionA[0] + snap.worldPositionB[0]) / 2,
+              (snap.worldPositionA[1] + snap.worldPositionB[1]) / 2 + 0.3,
+              (snap.worldPositionA[2] + snap.worldPositionB[2]) / 2,
+            ]}
+            center
+          >
+            <div className="bg-red-500/90 text-white text-xs px-2 py-1 rounded whitespace-nowrap font-display font-semibold">
+              卡扣 {snap.distance.toFixed(2)}
+            </div>
+          </Html>
+        </group>
+      ))}
 
-      <Html position={[0, 4, 0]} center>
-        <div className="bg-tech-500/20 backdrop-blur-sm px-3 py-2 rounded-lg border border-tech-500/50 text-center">
-          <p className="text-xs text-tech-300 font-display">装配区</p>
-        </div>
-      </Html>
+      {tutorialMode && tutorialSpaceConstraints.map((space, index) => {
+        const partA = level.parts.find((p) => p.id === space.partA);
+        const partB = level.parts.find((p) => p.id === space.partB);
+        if (!partA || !partB) return null;
+
+        const midPos: [number, number, number] = [
+          (partA.targetPosition[0] + partB.targetPosition[0]) / 2,
+          (partA.targetPosition[1] + partB.targetPosition[1]) / 2 + 0.5 + index * 0.3,
+          (partA.targetPosition[2] + partB.targetPosition[2]) / 2,
+        ];
+
+        return (
+          <Html key={`space-${space.constraintId}`} position={midPos} center>
+            <div className="bg-amber-500/90 text-white text-xs px-2 py-1 rounded whitespace-nowrap font-display font-semibold">
+              间距 {space.currentDistance.toFixed(2)} ({space.minDistance}~{space.maxDistance})
+            </div>
+          </Html>
+        );
+      })}
+
+      {!tutorialMode && (
+        <Html position={[7, 4, -1]} center>
+          <div className="bg-metal-800/80 backdrop-blur-sm px-3 py-2 rounded-lg border border-metal-600 text-center">
+            <p className="text-xs text-metal-400 font-display">待装配区</p>
+          </div>
+        </Html>
+      )}
+
+      {!tutorialMode && (
+        <Html position={[0, 4, 0]} center>
+          <div className="bg-tech-500/20 backdrop-blur-sm px-3 py-2 rounded-lg border border-tech-500/50 text-center">
+            <p className="text-xs text-tech-300 font-display">装配区</p>
+          </div>
+        </Html>
+      )}
 
       <OrbitControls
         makeDefault
@@ -393,7 +500,7 @@ function SceneContent({ level, onValidation, onAssemblyComplete }: SceneProps) {
   );
 }
 
-export default function AssemblyScene({ level, onValidation, onAssemblyComplete }: SceneProps) {
+export default function AssemblyScene({ level, onValidation, onAssemblyComplete, tutorialMode = false, tutorialStep = 0 }: SceneProps) {
   return (
     <Canvas
       shadows
@@ -401,7 +508,13 @@ export default function AssemblyScene({ level, onValidation, onAssemblyComplete 
       gl={{ antialias: true, alpha: true }}
       style={{ background: 'linear-gradient(180deg, #071019 0%, #0d1a2b 100%)' }}
     >
-      <SceneContent level={level} onValidation={onValidation} onAssemblyComplete={onAssemblyComplete} />
+      <SceneContent
+        level={level}
+        onValidation={onValidation}
+        onAssemblyComplete={onAssemblyComplete}
+        tutorialMode={tutorialMode}
+        tutorialStep={tutorialStep}
+      />
     </Canvas>
   );
 }

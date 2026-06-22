@@ -7,6 +7,7 @@ import { Trophy, Clock, AlertTriangle, ArrowLeft, RotateCcw, ChevronRight, Star 
 import { getLevelById, levels } from '@/data/levels';
 import { useProgressStore } from '@/store/useProgressStore';
 import { useAssemblyStore } from '@/store/useAssemblyStore';
+import { getLevelStats } from '@/engine/validationEngine';
 
 function ShellModel({ color, dimensions }: { color: string; dimensions: [number, number, number] }) {
   const groupRef = useRef<any>(null);
@@ -68,7 +69,7 @@ export default function Success() {
 
   const getScoreStars = () => {
     if (!progress?.bestTime || !level) return 0;
-    const baseTime = level.parts.length * 15;
+    const baseTime = getLevelStats(level).assemblySteps * 15;
     const ratio = progress.bestTime / baseTime;
     if (ratio <= 0.6 && errorCount === 0) return 3;
     if (ratio <= 1 && errorCount <= 2) return 2;
@@ -286,7 +287,7 @@ export default function Success() {
                   <div>
                     <p className="text-xs text-metal-500">零件数</p>
                     <p className="font-display text-xl font-bold text-white">
-                      {level.parts.length} 个
+                      {getLevelStats(level).assemblySteps} 个
                     </p>
                   </div>
                 </div>
