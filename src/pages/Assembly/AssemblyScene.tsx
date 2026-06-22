@@ -135,6 +135,7 @@ function SceneContent({ level, onValidation, onAssemblyComplete }: SceneProps) {
   const [dragPositions, setDragPositions] = useState<Map<string, [number, number, number]>>(new Map());
   const planeRef = useRef<THREE.Plane>(new THREE.Plane(new THREE.Vector3(0, 1, 0), 0));
   const dragOffsetRef = useRef<THREE.Vector3>(new THREE.Vector3());
+  const targetHeightRef = useRef<number>(0);
 
   const currentStep = getCurrentStep(level, placedParts);
 
@@ -165,7 +166,7 @@ function SceneContent({ level, onValidation, onAssemblyComplete }: SceneProps) {
         if (part) {
           const newPos: [number, number, number] = [
             intersectPoint.x + dragOffsetRef.current.x,
-            part.geometry.dimensions[1] / 2 + 0.01,
+            intersectPoint.y + dragOffsetRef.current.y,
             intersectPoint.z + dragOffsetRef.current.z,
           ];
 
@@ -195,9 +196,12 @@ function SceneContent({ level, onValidation, onAssemblyComplete }: SceneProps) {
       return;
     }
 
+    const targetHeight = part.targetPosition[1];
+    targetHeightRef.current = targetHeight;
+
     planeRef.current.setFromNormalAndCoplanarPoint(
       new THREE.Vector3(0, 1, 0),
-      new THREE.Vector3(0, part.geometry.dimensions[1] / 2 + 0.01, 0),
+      new THREE.Vector3(0, targetHeight, 0),
     );
 
     const currentPos = dragPositions.get(partId) || part.targetPosition;
@@ -209,7 +213,7 @@ function SceneContent({ level, onValidation, onAssemblyComplete }: SceneProps) {
     if (intersectPoint) {
       dragOffsetRef.current.set(
         currentPos[0] - intersectPoint.x,
-        0,
+        currentPos[1] - intersectPoint.y,
         currentPos[2] - intersectPoint.z,
       );
     }

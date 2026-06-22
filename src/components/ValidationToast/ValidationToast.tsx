@@ -71,35 +71,46 @@ export default function ValidationToast({ results, visible, onClose }: Validatio
               <div className="flex-1 min-w-0">
                 <h4
                   className={`
-                    font-display font-semibold text-base mb-1
+                    font-display font-semibold text-base mb-2
                     ${hasErrors ? 'text-warning-400' : 'text-success-400'}
                   `}
                 >
-                  {hasErrors ? '装配校验未通过' : '装配校验通过'}
+                  {hasErrors ? `装配校验未通过 (${results.filter(r => !r.passed).length}项)` : '装配校验通过'}
                 </h4>
 
-                {firstError && (
-                  <p className="text-sm text-metal-300 mb-2">
-                    {firstError.message}
-                  </p>
-                )}
-
-                {firstError?.hint && (
-                  <div className="flex items-start gap-2 p-2 rounded-lg bg-black/20">
-                    <Info className="w-4 h-4 text-tech-400 flex-shrink-0 mt-0.5" />
-                    <p className="text-xs text-metal-400">{firstError.hint}</p>
+                {hasErrors ? (
+                  <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
+                    {results.filter(r => !r.passed).map((error, idx) => (
+                      <div key={idx} className="space-y-1">
+                        <p className="text-sm text-metal-300">
+                          {error.message}
+                        </p>
+                        {error.hint && (
+                          <div className="flex items-start gap-2 p-2 rounded-lg bg-black/20">
+                            <Info className="w-4 h-4 text-tech-400 flex-shrink-0 mt-0.5" />
+                            <p className="text-xs text-metal-400">{error.hint}</p>
+                          </div>
+                        )}
+                        {error.errorType && (
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs px-2 py-0.5 rounded bg-warning-500/20 text-warning-400">
+                              {error.errorType === 'order' && '顺序错误'}
+                              {error.errorType === 'position' && '位置偏差'}
+                              {error.errorType === 'snap' && '卡扣错位'}
+                              {error.errorType === 'space' && '间距异常'}
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                    ))}
                   </div>
-                )}
-
-                {hasErrors && firstError?.errorType && (
-                  <div className="mt-2 flex items-center gap-2">
-                    <span className="text-xs text-metal-500">错误类型:</span>
-                    <span className="text-xs px-2 py-0.5 rounded bg-warning-500/20 text-warning-400">
-                      {firstError.errorType === 'order' && '顺序错误'}
-                      {firstError.errorType === 'position' && '位置偏差'}
-                      {firstError.errorType === 'snap' && '卡扣错位'}
-                      {firstError.errorType === 'space' && '间距异常'}
-                    </span>
+                ) : (
+                  <div className="space-y-1">
+                    {results.filter(r => r.passed).map((success, idx) => (
+                      <p key={idx} className="text-sm text-metal-400">
+                        ✓ {success.message}
+                      </p>
+                    ))}
                   </div>
                 )}
               </div>

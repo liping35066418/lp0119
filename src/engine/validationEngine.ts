@@ -190,16 +190,8 @@ export const validatePartPlacement = (
   const orderResult = validateOrder(partId, level, placedParts);
   results.push(orderResult);
 
-  if (!orderResult.passed) {
-    return results;
-  }
-
   const positionResult = validatePosition(part, position);
   results.push(positionResult);
-
-  if (!positionResult.passed) {
-    return results;
-  }
 
   const tempPlacedParts = new Map(placedParts);
   tempPlacedParts.set(partId, { position, rotation, isCorrect: true });
